@@ -14,75 +14,116 @@
             height: 100vh; color: white; text-align: center;
         }
         .launch-container {
-            background: rgba(255,255,255,0.15); backdrop-filter: blur(20px);
-            border-radius: 30px; padding: 60px 50px; box-shadow: 0 25px 80px rgba(0,0,0,0.3);
-            max-width: 620px; border: 2px solid rgba(255,255,255,0.2);
-            text-align: center;
+            background: rgba(255,255,255,0.15); 
+            backdrop-filter: blur(20px);
+            border-radius: 30px; 
+            padding: 60px 50px; 
+            box-shadow: 0 25px 80px rgba(0,0,0,0.3);
+            max-width: 620px; 
+            border: 2px solid rgba(255,255,255,0.2);
         }
         .logo { 
-            font-size: 48px; font-weight: bold; 
+            font-size: 48px; 
+            font-weight: bold; 
             background: linear-gradient(45deg, #d63384, #ff6b9d); 
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent; 
             margin-bottom: 30px;
         }
-        h1 { font-size: 32px; margin-bottom: 16px; }
-        .subtitle { font-size: 18px; opacity: 0.9; margin-bottom: 20px; }
+        h1 { 
+            font-size: 32px; 
+            margin-bottom: 16px; 
+        }
+        .subtitle { 
+            font-size: 18px; 
+            opacity: 0.9; 
+            margin-bottom: 20px; 
+        }
         .spinner {
             border: 8px solid rgba(255,255,255,0.2);
             border-top: 8px solid #28a745;
             border-radius: 50%;
-            width: 80px; height: 80px;
+            width: 80px; 
+            height: 80px;
             animation: spin 1.2s linear infinite;
             margin: 0 auto 30px;
         }
-        .message { font-size: 18px; margin-bottom: 20px; }
-        .small { font-size: 14px; opacity: 0.8; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .message { 
+            font-size: 18px; 
+            margin-bottom: 20px; 
+        }
+        .small { 
+            font-size: 14px; 
+            opacity: 0.8; 
+        }
+        .error-box {
+            background: rgba(220,53,69,0.3);
+            border: 1px solid #dc3545;
+            border-radius: 20px;
+            padding: 30px;
+            color: #f8d7da;
+            max-width: 600px;
+            margin: 30px auto 0;
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
     </style>
 </head>
 <body>
-    <div class="launch-container">
+    <div class="launch-container" id="mainContainer">
         <div class="logo">🚨 Sepsis Monitor</div>
         <h1>敗血症早期監控系統</h1>
         <p class="subtitle">SMART on FHIR 臨床決策支援應用</p>
         
-        <div class="spinner"></div>
-        <p class="message">正在連接衛福部 THAS FHIR 伺服器並進行安全性驗證...</p>
+        <div class="spinner" id="spinner"></div>
+        <p class="message" id="message">正在連接衛福部 THAS FHIR 伺服器並進行安全性驗證...</p>
         <p class="small">請稍候，勿關閉或重新整理頁面</p>
     </div>
 
     <script>
-        // 從 URL 取得 iss（EHR 提供的 FHIR server）
+        // 從 URL 取得 iss 參數
         const params = new URLSearchParams(window.location.search);
         const iss = params.get("iss");
 
         if (!iss) {
-            document.body.innerHTML = `
-                <div style="color: #f8d7da; background: rgba(220,53,69,0.3); padding: 40px; border-radius: 20px; max-width: 600px; margin: auto;">
+            // 沒有 iss 參數 → 顯示錯誤
+            document.getElementById('mainContainer').innerHTML = `
+                <div class="error-box">
                     <h2>❌ 啟動失敗</h2>
-                    <p>未偵測到 EHR 啟動參數 (iss)。<br>請從相容的 EHR 系統（如 THAS 整合的 HIS）重新啟動此應用。</p>
+                    <p>未偵測到 EHR 伺服器位址 (iss 參數)。<br>
+                    請從 THAS 或相容的醫院資訊系統點擊應用連結啟動，<br>
+                    而不是直接開啟此頁面或手動貼上 URL。</p>
                 </div>
             `;
-        } else {
-            // 自動執行 SMART authorize（無需按鈕）
-            FHIR.oauth2.authorize({
-                iss: iss,                          // 從 URL 取得的 FHIR server
-                clientId: "your_real_client_id_here",  // ★ 必須替換成你在 THAS 註冊的真實 client_id
-                scope: "launch patient/Patient.read patient/Observation.read patient/Observation.write patient/Encounter.read openid profile fhirUser",
-                redirectUri: window.location.origin + "/index.html",
-                // launch 參數會自動從 query string 帶入，由 fhir-client.js 處理
-            }).catch(err => {
-                // 如果 authorize 拋錯（例如 clientId 無效）
-                document.body.innerHTML = `
-                    <div style="color: #f8d7da; background: rgba(220,53,69,0.3); padding: 40px; border-radius: 20px; max-width: 600px; margin: auto;">
-                        <h2>❌ 授權失敗</h2>
-                        <p>${err.message || '未知錯誤'}</p>
-                        <p>可能原因：client_id 未註冊、redirect_uri 不符，或 scope 權限不足。<br>請聯絡系統管理員確認 THAS 註冊資訊。</p>
-                    </div>
-                `;
-                console.error("SMART authorize 錯誤:", err);
-            });
+            return;
         }
+
+        // 自動執行 SMART on FHIR 授權流程
+        FHIR.oauth2.authorize({
+            iss: iss,
+            clientId: "your_thas_registered_client_id_here",  // ★ 必須替換成 THAS 實際註冊的 client_id
+            scope: "launch patient/Patient.read patient/Observation.read patient/Observation.write patient/Encounter.read openid profile fhirUser",
+            redirectUri: window.location.origin + "/index.html"
+        }).catch(err => {
+            // 授權失敗時顯示錯誤訊息
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('message').style.display = 'none';
+            document.getElementById('mainContainer').innerHTML += `
+                <div class="error-box">
+                    <h2>❌ 授權流程失敗</h2>
+                    <p>${err.message || '未知錯誤，請檢查瀏覽器 console'}</p>
+                    <p>常見原因：<br>
+                    • client_id 未在 THAS 註冊<br>
+                    • redirect_uri 未正確設定（應為 ${window.location.origin}/index.html）<br>
+                    • 瀏覽器阻擋彈出視窗或第三方 cookie<br>
+                    • scope 權限不足</p>
+                    <p>請確認 THAS 註冊資訊，或聯絡系統管理員。</p>
+                </div>
+            `;
+            console.error("SMART authorize 錯誤:", err);
+        });
     </script>
 </body>
 </html>
