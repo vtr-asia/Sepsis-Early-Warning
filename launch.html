@@ -17,6 +17,7 @@
             background: rgba(255,255,255,0.15); backdrop-filter: blur(20px);
             border-radius: 30px; padding: 60px 50px; box-shadow: 0 25px 80px rgba(0,0,0,0.3);
             max-width: 620px; border: 2px solid rgba(255,255,255,0.2);
+            text-align: center;
         }
         .logo { 
             font-size: 48px; font-weight: bold; 
@@ -25,24 +26,18 @@
             margin-bottom: 30px;
         }
         h1 { font-size: 32px; margin-bottom: 16px; }
-        .subtitle { font-size: 18px; opacity: 0.9; margin-bottom: 40px; }
-        .launch-btn { 
-            background: linear-gradient(45deg, #28a745, #20c997); color: white; 
-            border: none; padding: 20px 60px; border-radius: 50px; font-size: 20px; 
-            font-weight: bold; cursor: pointer; transition: all 0.3s ease; 
-            box-shadow: 0 15px 40px rgba(40,167,69,0.4); margin: 20px 0;
+        .subtitle { font-size: 18px; opacity: 0.9; margin-bottom: 20px; }
+        .spinner {
+            border: 8px solid rgba(255,255,255,0.2);
+            border-top: 8px solid #28a745;
+            border-radius: 50%;
+            width: 80px; height: 80px;
+            animation: spin 1.2s linear infinite;
+            margin: 0 auto 30px;
         }
-        .launch-btn:hover { transform: translateY(-5px); box-shadow: 0 25px 60px rgba(40,167,69,0.6); }
-        .launch-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        .status { 
-            padding: 20px 30px; border-radius: 15px; margin: 20px 0; font-size: 16px; 
-            min-height: 80px; display: flex; align-items: center; justify-content: center;
-            line-height: 1.5;
-        }
-        .status.loading { background: rgba(255,255,255,0.1); color: #fff; }
-        .status.success { background: rgba(40,167,69,0.3); color: #d4edda; border: 1px solid #28a745; }
-        .status.error { background: rgba(220,53,69,0.3); color: #f8d7da; border: 1px solid #dc3545; }
-        .info-text { font-size: 14px; opacity: 0.8; margin-top: 30px; }
+        .message { font-size: 18px; margin-bottom: 20px; }
+        .small { font-size: 14px; opacity: 0.8; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -51,104 +46,43 @@
         <h1>敗血症早期監控系統</h1>
         <p class="subtitle">SMART on FHIR 臨床決策支援應用</p>
         
-        <div id="status" class="status loading">
-            正在初始化 SMART 啟動序列...<br>
-            <small>請稍候，正在偵測 EHR 啟動參數...</small>
-        </div>
-        
-        <button id="launchBtn" class="launch-btn" style="display: none;" onclick="doLaunch()">
-            🚀 啟動系統
-        </button>
-
-        <div class="info-text">
-            目標伺服器：衛福部 THAS FHIR Server (R4)<br>
-            需要從 EHR 系統（如醫院資訊系統）啟動此應用
-        </div>
+        <div class="spinner"></div>
+        <p class="message">正在連接衛福部 THAS FHIR 伺服器並進行安全性驗證...</p>
+        <p class="small">請稍候，勿關閉或重新整理頁面</p>
     </div>
 
     <script>
-        // SMART Launch 配置
-        const config = {
-            clientId: "my_sepsis_app",  // ★ 請務必替換成你在 THAS 註冊的真實 client_id
-            scope: "launch patient/Patient.read patient/Observation.read patient/Observation.write patient/Encounter.read openid profile fhirUser",
-            redirectUri: window.location.origin + "/index.html",
-            iss: null,
-            launch: null
-        };
+        // 從 URL 取得 iss（EHR 提供的 FHIR server）
+        const params = new URLSearchParams(window.location.search);
+        const iss = params.get("iss");
 
-        function updateStatus(message, type = 'loading') {
-            const statusEl = document.getElementById('status');
-            statusEl.className = `status ${type}`;
-            statusEl.innerHTML = message;
+        if (!iss) {
+            document.body.innerHTML = `
+                <div style="color: #f8d7da; background: rgba(220,53,69,0.3); padding: 40px; border-radius: 20px; max-width: 600px; margin: auto;">
+                    <h2>❌ 啟動失敗</h2>
+                    <p>未偵測到 EHR 啟動參數 (iss)。<br>請從相容的 EHR 系統（如 THAS 整合的 HIS）重新啟動此應用。</p>
+                </div>
+            `;
+        } else {
+            // 自動執行 SMART authorize（無需按鈕）
+            FHIR.oauth2.authorize({
+                iss: iss,                          // 從 URL 取得的 FHIR server
+                clientId: "your_real_client_id_here",  // ★ 必須替換成你在 THAS 註冊的真實 client_id
+                scope: "launch patient/Patient.read patient/Observation.read patient/Observation.write patient/Encounter.read openid profile fhirUser",
+                redirectUri: window.location.origin + "/index.html",
+                // launch 參數會自動從 query string 帶入，由 fhir-client.js 處理
+            }).catch(err => {
+                // 如果 authorize 拋錯（例如 clientId 無效）
+                document.body.innerHTML = `
+                    <div style="color: #f8d7da; background: rgba(220,53,69,0.3); padding: 40px; border-radius: 20px; max-width: 600px; margin: auto;">
+                        <h2>❌ 授權失敗</h2>
+                        <p>${err.message || '未知錯誤'}</p>
+                        <p>可能原因：client_id 未註冊、redirect_uri 不符，或 scope 權限不足。<br>請聯絡系統管理員確認 THAS 註冊資訊。</p>
+                    </div>
+                `;
+                console.error("SMART authorize 錯誤:", err);
+            });
         }
-
-        function init() {
-            const params = new URLSearchParams(window.location.search);
-            const hasLaunch = params.has('launch');
-            const hasIss = params.has('iss');
-
-            // 強制 debug 輸出到 console
-            console.log('=== SMART Launch 偵測 ===');
-            console.log('URL:', window.location.href);
-            console.log('launch 參數存在:', hasLaunch, '值:', params.get('launch'));
-            console.log('iss 參數存在:', hasIss, '值:', params.get('iss'));
-
-            if (hasLaunch && hasIss) {
-                config.launch = params.get('launch');
-                config.iss = params.get('iss');
-                
-                updateStatus(
-                    `✅ 已偵測到 EHR 啟動信號<br>` +
-                    `<small>Issuer: ${config.iss}<br>Launch ID: ${config.launch.substring(0, 30)}...</small>`,
-                    'success'
-                );
-                document.getElementById('launchBtn').style.display = 'inline-block';
-            } else {
-                updateStatus(
-                    `❌ 錯誤：未偵測到啟動參數 (launch & iss)<br>` +
-                    `launch 存在: ${hasLaunch}<br>iss 存在: ${hasIss}<br><br>` +
-                    `請從相容的 EHR 系統（如 THAS 整合的 HIS）重新啟動此 App。<br>` +
-                    `直接開啟此頁面無法進行 SMART Launch。`,
-                    'error'
-                );
-            }
-        }
-
-        async function doLaunch() {
-            const btn = document.getElementById('launchBtn');
-            btn.disabled = true;
-            btn.textContent = "正在跳轉授權...";
-
-            updateStatus(
-                `正在執行 SMART 授權流程...<br>` +
-                `Issuer: ${config.iss}<br>請勿關閉或重新整理視窗`,
-                'loading'
-            );
-
-            try {
-                await FHIR.oauth2.authorize({
-                    iss: config.iss,
-                    clientId: config.clientId,
-                    scope: config.scope,
-                    redirectUri: config.redirectUri,
-                    launch: config.launch
-                });
-                // authorize() 會自動 redirect，不會執行到這裡
-            } catch (err) {
-                console.error("SMART authorize 失敗:", err);
-                updateStatus(
-                    `❌ 授權流程啟動失敗<br>${err.message || '未知錯誤'}<br><br>` +
-                    `可能原因：client_id 未在 THAS 註冊、redirect_uri 不符、或 scope 權限不足。<br>` +
-                    `請檢查 console 錯誤訊息，或聯絡系統管理員。`,
-                    'error'
-                );
-                btn.disabled = false;
-                btn.textContent = "🚀 啟動系統";
-            }
-        }
-
-        // 頁面載入時執行
-        window.onload = init;
     </script>
 </body>
 </html>
