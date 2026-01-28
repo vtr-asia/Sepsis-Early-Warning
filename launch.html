@@ -69,14 +69,12 @@
     <script>
         // SMART Launch 配置
         const config = {
-            clientId: "my_sepsis_app",  // 請替換成你在 THAS 註冊的真實 client_id
-            scope: "patient/Patient.read patient/Observation.read patient/Observation.write patient/Encounter.read openid profile fhirUser",
+            clientId: "my_sepsis_app",  // ★ 請務必替換成你在 THAS 註冊的真實 client_id
+            scope: "launch patient/Patient.read patient/Observation.read patient/Observation.write patient/Encounter.read openid profile fhirUser",
             redirectUri: window.location.origin + "/index.html",
-            iss: null,  // 會從 URL 參數取得
+            iss: null,
             launch: null
         };
-
-        let launchDetected = false;
 
         function updateStatus(message, type = 'loading') {
             const statusEl = document.getElementById('status');
@@ -86,23 +84,31 @@
 
         function init() {
             const params = new URLSearchParams(window.location.search);
-            
-            if (params.has('launch') && params.has('iss')) {
+            const hasLaunch = params.has('launch');
+            const hasIss = params.has('iss');
+
+            // 強制 debug 輸出到 console
+            console.log('=== SMART Launch 偵測 ===');
+            console.log('URL:', window.location.href);
+            console.log('launch 參數存在:', hasLaunch, '值:', params.get('launch'));
+            console.log('iss 參數存在:', hasIss, '值:', params.get('iss'));
+
+            if (hasLaunch && hasIss) {
                 config.launch = params.get('launch');
                 config.iss = params.get('iss');
                 
-                launchDetected = true;
                 updateStatus(
                     `✅ 已偵測到 EHR 啟動信號<br>` +
-                    `<small>Issuer: ${config.iss}<br>Launch ID: ${config.launch}</small>`,
+                    `<small>Issuer: ${config.iss}<br>Launch ID: ${config.launch.substring(0, 30)}...</small>`,
                     'success'
                 );
                 document.getElementById('launchBtn').style.display = 'inline-block';
             } else {
                 updateStatus(
-                    `❌ 錯誤：未偵測到必要的啟動參數 (launch & iss)<br>` +
-                    `請從相容的 EHR 系統（如 THAS 整合的 HIS）重新啟動此應用程式。<br><br>` +
-                    `<small>提示：直接開啟此頁面無法進行 SMART Launch。</small>`,
+                    `❌ 錯誤：未偵測到啟動參數 (launch & iss)<br>` +
+                    `launch 存在: ${hasLaunch}<br>iss 存在: ${hasIss}<br><br>` +
+                    `請從相容的 EHR 系統（如 THAS 整合的 HIS）重新啟動此 App。<br>` +
+                    `直接開啟此頁面無法進行 SMART Launch。`,
                     'error'
                 );
             }
@@ -113,7 +119,11 @@
             btn.disabled = true;
             btn.textContent = "正在跳轉授權...";
 
-            updateStatus("正在執行 SMART 授權流程...<br>請勿關閉視窗", 'loading');
+            updateStatus(
+                `正在執行 SMART 授權流程...<br>` +
+                `Issuer: ${config.iss}<br>請勿關閉或重新整理視窗`,
+                'loading'
+            );
 
             try {
                 await FHIR.oauth2.authorize({
@@ -121,16 +131,15 @@
                     clientId: config.clientId,
                     scope: config.scope,
                     redirectUri: config.redirectUri,
-                    launch: config.launch,
-                    // 可選：加入 fhirServer（如果需要強制指定）
-                    // fhirServer: "https://thas.mohw.gov.tw/v/r4/fhir"
+                    launch: config.launch
                 });
-                // authorize() 會自動進行 redirect，不會執行到這裡
+                // authorize() 會自動 redirect，不會執行到這裡
             } catch (err) {
-                console.error("SMART authorize 失敗", err);
+                console.error("SMART authorize 失敗:", err);
                 updateStatus(
                     `❌ 授權流程啟動失敗<br>${err.message || '未知錯誤'}<br><br>` +
-                    `請重新從 EHR 系統啟動，或聯絡系統管理員確認 client_id 與 scope。`,
+                    `可能原因：client_id 未在 THAS 註冊、redirect_uri 不符、或 scope 權限不足。<br>` +
+                    `請檢查 console 錯誤訊息，或聯絡系統管理員。`,
                     'error'
                 );
                 btn.disabled = false;
@@ -138,10 +147,8 @@
             }
         }
 
-        // 頁面載入時執行初始化
+        // 頁面載入時執行
         window.onload = init;
-
-        // 防止意外重新整理時狀態消失，可選加 localStorage 記錄（但通常不需要）
     </script>
 </body>
 </html>
