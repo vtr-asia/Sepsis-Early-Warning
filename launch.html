@@ -2,127 +2,64 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>敗血症早期監控系統 - SMART on FHIR Launch</title>
-    <script src="https://cdn.jsdelivr.net/npm/fhirclient@5/build/fhir-client.js"></script>
+    <title>SMART on FHIR Launch - 敗血症監控系統</title>
+    <script src="https://cdn.jsdelivr.net/npm/fhirclient/build/fhir-client.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: 'Microsoft JhengHei', 'Noto Sans TC', sans-serif; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex; justify-content: center; align-items: center; 
-            height: 100vh; color: white; text-align: center;
+        body {
+            font-family: 'Microsoft JhengHei', sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
         }
-        .launch-container {
-            background: rgba(255,255,255,0.15); 
-            backdrop-filter: blur(20px);
-            border-radius: 30px; 
-            padding: 60px 50px; 
-            box-shadow: 0 25px 80px rgba(0,0,0,0.3);
-            max-width: 620px; 
-            border: 2px solid rgba(255,255,255,0.2);
-        }
-        .logo { 
-            font-size: 48px; 
-            font-weight: bold; 
-            background: linear-gradient(45deg, #d63384, #ff6b9d); 
-            -webkit-background-clip: text; 
-            -webkit-text-fill-color: transparent; 
-            margin-bottom: 30px;
-        }
-        h1 { 
-            font-size: 32px; 
-            margin-bottom: 16px; 
-        }
-        .subtitle { 
-            font-size: 18px; 
-            opacity: 0.9; 
-            margin-bottom: 20px; 
+        .loading-container {
+            text-align: center;
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
         }
         .spinner {
-            border: 8px solid rgba(255,255,255,0.2);
-            border-top: 8px solid #28a745;
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
-            width: 80px; 
-            height: 80px;
-            animation: spin 1.2s linear infinite;
-            margin: 0 auto 30px;
+            border-left-color: #764ba2;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
         }
-        .message { 
-            font-size: 18px; 
-            margin-bottom: 20px; 
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-        .small { 
-            font-size: 14px; 
-            opacity: 0.8; 
-        }
-        .error-box {
-            background: rgba(220,53,69,0.3);
-            border: 1px solid #dc3545;
-            border-radius: 20px;
-            padding: 30px;
-            color: #f8d7da;
-            max-width: 600px;
-            margin: 30px auto 0;
-        }
-        @keyframes spin { 
-            0% { transform: rotate(0deg); } 
-            100% { transform: rotate(360deg); } 
-        }
+        h2 { color: #333; margin-bottom: 10px; }
+        p { color: #666; }
     </style>
 </head>
 <body>
-    <div class="launch-container" id="mainContainer">
-        <div class="logo">🚨 Sepsis Monitor</div>
-        <h1>敗血症早期監控系統</h1>
-        <p class="subtitle">SMART on FHIR 臨床決策支援應用</p>
-        
-        <div class="spinner" id="spinner"></div>
-        <p class="message" id="message">正在連接衛福部 THAS FHIR 伺服器並進行安全性驗證...</p>
-        <p class="small">請稍候，勿關閉或重新整理頁面</p>
+
+    <div class="loading-container">
+        <div class="spinner"></div>
+        <h2>系統啟動中</h2>
+        <p>正在連線至衛福部 THAS FHIR 伺服器...</p>
     </div>
 
     <script>
-        // 從 URL 取得 iss 參數
-        const params = new URLSearchParams(window.location.search);
-        const iss = params.get("iss");
-
-        if (!iss) {
-            // 沒有 iss 參數 → 顯示錯誤
-            document.getElementById('mainContainer').innerHTML = `
-                <div class="error-box">
-                    <h2>❌ 啟動失敗</h2>
-                    <p>未偵測到 EHR 伺服器位址 (iss 參數)。<br>
-                    請從 THAS 或相容的醫院資訊系統點擊應用連結啟動，<br>
-                    而不是直接開啟此頁面或手動貼上 URL。</p>
-                </div>
-            `;
-            return;
-        }
-
-        // 自動執行 SMART on FHIR 授權流程
+        // SMART on FHIR 啟動配置
         FHIR.oauth2.authorize({
-            iss: iss,
-            clientId: "your_thas_registered_client_id_here",  // ★ 必須替換成 THAS 實際註冊的 client_id
-            scope: "launch patient/Patient.read patient/Observation.read patient/Observation.write patient/Encounter.read openid profile fhirUser",
-            redirectUri: window.location.origin + "/index.html"
-        }).catch(err => {
-            // 授權失敗時顯示錯誤訊息
-            document.getElementById('spinner').style.display = 'none';
-            document.getElementById('message').style.display = 'none';
-            document.getElementById('mainContainer').innerHTML += `
-                <div class="error-box">
-                    <h2>❌ 授權流程失敗</h2>
-                    <p>${err.message || '未知錯誤，請檢查瀏覽器 console'}</p>
-                    <p>常見原因：<br>
-                    • client_id 未在 THAS 註冊<br>
-                    • redirect_uri 未正確設定（應為 ${window.location.origin}/index.html）<br>
-                    • 瀏覽器阻擋彈出視窗或第三方 cookie<br>
-                    • scope 權限不足</p>
-                    <p>請確認 THAS 註冊資訊，或聯絡系統管理員。</p>
-                </div>
-            `;
-            console.error("SMART authorize 錯誤:", err);
+            // 這裡填寫你在 THAS 或 EHR 系統註冊的 Client ID
+            "clientId": "sepsis-monitor-app-id", 
+            
+            // 要求的權限範圍 (Scope)
+            "scope": "patient/*.read patient/*.write openid fhirUser launch",
+            
+            // 成功授權後導回的頁面 (即你的主儀表板)
+            "redirectUri": "index.html",
+            
+            // 選填：如果要在不支援自動發現的伺服器上測試，可以手動指定
+            // "iss": "https://thas.mohw.gov.tw/v/r4/fhir"
         });
     </script>
 </body>
