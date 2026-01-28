@@ -3,109 +3,275 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>敗血症早期監控系統 - Sepsis Early Warning Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/fhirclient@5/build/fhir-client.js"></script>
+    <title>SepsisGuard | 敗血症早期預警系統</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        :root {
+            --primary: #4f46e5;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --sidebar-bg: #ffffff;
+            --main-bg: #f8fafc;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
-            font-family: 'Microsoft JhengHei', 'Noto Sans TC', sans-serif; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100vh; overflow: hidden;
+            font-family: 'Inter', 'Noto Sans TC', sans-serif; 
+            background: var(--main-bg); color: #1e293b;
+            display: flex; height: 100vh; overflow: hidden;
         }
-        .container { display: flex; height: 100vh; }
+
+        /* Sidebar 樣式 */
         .sidebar { 
-            width: 380px; background: rgba(255,255,255,0.97); 
-            backdrop-filter: blur(20px); padding: 30px; box-shadow: 5px 0 40px rgba(0,0,0,0.15);
-            overflow-y: auto;
+            width: 350px; background: var(--sidebar-bg); border-right: 1px solid #e2e8f0;
+            padding: 30px; display: flex; flex-direction: column; z-index: 100;
         }
-        .main { flex: 1; padding: 30px; overflow-y: auto; }
-        .logo { 
-            font-size: 32px; font-weight: bold; color: #d63384; margin-bottom: 40px; 
-            text-align: center; background: linear-gradient(45deg, #d63384, #ff6b9d); 
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        .logo { font-size: 26px; font-weight: 800; color: var(--primary); margin-bottom: 40px; display: flex; align-items: center; gap: 10px; }
+        
+        .patient-card {
+            background: #f1f5f9; border-radius: 16px; padding: 20px; border: 2px solid transparent;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; margin-bottom: 15px;
         }
-        .status-panel {
-            background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%); 
-            border-radius: 20px; padding: 25px; margin-bottom: 30px; 
-            border-left: 8px solid #dc3545; box-shadow: 0 10px 40px rgba(220,53,69,0.2);
+        .patient-card.active { border-color: var(--primary); background: #eef2ff; transform: scale(1.02); }
+        .patient-card.high-risk { border-left: 6px solid var(--danger); }
+
+        /* 主面板樣式 */
+        .main { flex: 1; padding: 40px; overflow-y: auto; position: relative; transition: background 0.5s; }
+        .emergency-bg { animation: dangerPulse 2s infinite; }
+        @keyframes dangerPulse { 
+            0% { background: #f8fafc; } 
+            50% { background: #fef2f2; } 
+            100% { background: #f8fafc; } 
         }
-        .patient-card { 
-            background: white; border-radius: 20px; padding: 25px; margin-bottom: 20px; 
-            box-shadow: 0 15px 50px rgba(0,0,0,0.1); transition: all 0.3s ease;
-            border-left: 6px solid #28a745; cursor: pointer;
-        }
-        .patient-card:hover { transform: translateY(-5px); box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
-        .patient-card.high-risk { border-left-color: #dc3545; background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%); }
-        .patient-card.warning { border-left-color: #ffc107; background: linear-gradient(135deg, #fffbe6 0%, #fff4cc 100%); }
-        .patient-name { font-size: 22px; font-weight: bold; color: #333; margin-bottom: 15px; }
-        .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-        .metric { text-align: center; padding: 15px; border-radius: 12px; background: rgba(255,255,255,0.8); }
-        .metric-value { font-size: 26px; font-weight: bold; }
-        .metric-label { font-size: 13px; color: #666; margin-top: 5px; }
-        .metric-high { color: #dc3545 !important; }
-        .metric-low { color: #28a745 !important; }
-        .qsofa-score { 
-            text-align: center; padding: 25px; border-radius: 20px; font-size: 42px; font-weight: bold; 
-            margin: 25px 0; text-shadow: 0 3px 15px rgba(0,0,0,0.2); position: relative;
-        }
-        .qsofa-low { background: linear-gradient(135deg, #28a745, #20c997); color: white; }
-        .qsofa-high { background: linear-gradient(135deg, #dc3545, #fd7e14); color: white; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(220,53,69,0.5); } 50% { transform: scale(1.03); box-shadow: 0 0 40px rgba(220,53,69,0.8); } }
-        .alert-banner { 
-            background: linear-gradient(135deg, #dc3545, #fd7e14); color: white; padding: 25px; 
-            border-radius: 20px; text-align: center; font-weight: bold; margin-bottom: 30px;
-            animation: slideDown 0.6s ease; box-shadow: 0 10px 40px rgba(220,53,69,0.3);
-        }
-        @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .btn { 
-            width: 100%; padding: 18px; border: none; border-radius: 15px; font-size: 18px; font-weight: bold; 
-            cursor: pointer; transition: all 0.3s ease; margin-bottom: 15px; position: relative; overflow: hidden;
-        }
-        .btn-primary { background: linear-gradient(45deg, #667eea, #764ba2); color: white; }
-        .btn-danger { background: linear-gradient(45deg, #dc3545, #fd7e14); color: white; }
-        .btn-success { background: linear-gradient(45deg, #28a745, #20c997); color: white; }
-        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
-        .btn:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(0,0,0,0.25); }
-        .btn:active:not(:disabled) { transform: translateY(-1px); }
-        .status-indicator { width: 14px; height: 14px; border-radius: 50%; display: inline-block; margin-right: 10px; }
-        .status-green { background: #28a745; box-shadow: 0 0 10px #28a745; }
-        .status-red { background: #dc3545; animation: blink 1.2s infinite; box-shadow: 0 0 15px #dc3545; }
-        @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.4; } }
-        .trend-chart { height: 90px; background: linear-gradient(135deg, #f8f9ff 0%, #e8ecff 100%); border-radius: 15px; margin-top: 12px; position: relative; overflow: hidden; }
-        .trend-line { position: absolute; bottom: 12px; left: 25px; right: 25px; height: 5px; background: linear-gradient(90deg, #28a745, #ffc107, #dc3545); border-radius: 3px; }
-        .fhir-status { background: rgba(40,167,69,0.1); border: 2px solid #28a745; color: #28a745; padding: 15px; border-radius: 12px; margin-top: 20px; font-family: monospace; }
-        .upload-history { max-height: 200px; overflow-y: auto; background: rgba(255,255,255,0.5); border-radius: 12px; padding: 15px; font-size: 14px; }
-        .history-item { padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.1); }
-        .history-item:last-child { border-bottom: none; }
-        @media (max-width: 768px) { .container { flex-direction: column; } .sidebar { width: 100%; height: auto; } .main { padding: 20px; } }
+
+        /* 頂部資訊欄 */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .door-timer { text-align: right; }
+        .door-timer .time { font-size: 32px; font-weight: 800; color: var(--primary); font-variant-numeric: tabular-nums; }
+
+        /* 儀表板卡片 */
+        .dashboard-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 30px; }
+        .glass-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(10px); border-radius: 24px; padding: 30px; border: 1px solid rgba(255,255,255,0.5); box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+
+        /* qSOFA 視覺 */
+        .qsofa-section { margin-bottom: 30px; }
+        .qsofa-val { font-size: 80px; font-weight: 800; line-height: 1; color: var(--danger); }
+        
+        /* 指標網格 */
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .metric-item { background: #ffffff; padding: 15px; border-radius: 16px; border: 1px solid #f1f5f9; }
+        .metric-label { font-size: 14px; color: #64748b; margin-bottom: 5px; }
+        .metric-value { font-size: 24px; font-weight: 700; }
+        .chart-container { height: 60px; margin-top: 10px; }
+
+        /* CDS Hooks 樣式 */
+        .cds-card { background: #fffbeb; border: 1px solid #fde68a; }
+        .cds-alert { display: flex; gap: 12px; margin-top: 15px; font-size: 15px; color: #92400e; line-height: 1.5; }
+
+        /* 按鈕樣式 */
+        .btn { padding: 14px; border-radius: 12px; border: none; font-weight: 700; cursor: pointer; transition: 0.3s; font-size: 15px; width: 100%; margin-top: 10px; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { opacity: 0.9; transform: translateY(-2px); }
+        .btn-ghost { background: transparent; border: 1px solid #e2e8f0; color: #64748b; }
+
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--danger); animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- 左側導航與控制面板 -->
-        <div class="sidebar">
-            <div class="logo">🚨 敗血症監控系統</div>
-            
-            <div class="alert-banner" id="alertBanner" style="display:none;">
-                <span class="status-indicator status-red"></span>
-                ⚠️ 高風險病患即時警示！qSOFA ≥ 2分
+
+    <div class="sidebar">
+        <div class="logo"><span>🩺</span> SepsisGuard</div>
+        
+        <div style="font-size: 12px; color: #94a3b8; font-weight: 700; margin-bottom: 15px; letter-spacing: 1px;">PATIENT LIST</div>
+        <div class="patient-card active high-risk">
+            <div style="display:flex; justify-content: space-between;">
+                <strong>王小明</strong>
+                <span class="status-dot"></span>
             </div>
-            
-            <div style="margin-bottom: 30px;">
-                <h3 style="color: #333; margin-bottom: 20px; display: flex; align-items: center;">
-                    📋 監控病患列表 <span id="patientCount" style="margin-left: auto; font-size: 16px; color: #666;">1位</span>
-                </h3>
-                <div id="patientList">
-                    <div class="patient-card high-risk" onclick="selectPatient('patient-123')">
-                        <div class="patient-name">王小明 <span class="status-indicator status-red"></span></div>
-                        <div class="metrics">
-                            <div class="metric"><div class="metric-value metric-high">39.0°C</div><div class="metric-label">體溫</div></div>
-                            <div class="metric"><div class="metric-value metric-high">27次/分</div><div class="metric-label">呼吸速率</div></div>
-                        </div>
-                        <div style="font-size: 16px; color: #dc3545; font-weight: bold;">⚠️ qSOFA: 2分 - 高風險</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 5px;">ID: patient-123</div>
+            <div style="margin-top: 10px;"><span style="background: #fee2e2; color: #ef4444; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 800;">CRITICAL: qSOFA 2</span></div>
+        </div>
+
+        <div style="margin-top: auto;">
+            <button class="btn btn-primary" id="startBtn" onclick="toggleMonitoring()">▶ 開始即時監測</button>
+            <button class="btn btn-ghost" onclick="uploadFHIR()">💾 同步至 THAS</button>
+            <div id="uploadStatus" style="display:none; font-size: 12px; color: var(--success); margin-top: 10px; text-align: center;">✅ FHIR Resource 已上傳</div>
+        </div>
+    </div>
+
+    <div class="main" id="mainPanel">
+        <div class="header">
+            <div>
+                <h1 style="font-size: 24px; font-weight: 800;">敗血症臨床決策儀表板</h1>
+                <p style="color: #64748b;">最後同步時間：<span id="syncTime">--:--:--</span></p>
+            </div>
+            <div class="door-timer">
+                <div style="font-size: 12px; font-weight: 700; color: #64748b;">黃金治療時間 (Door-to-Antibiotic)</div>
+                <div class="time" id="doorTime">00:12:45</div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="glass-card">
+                <div class="qsofa-section">
+                    <div style="background: #fee2e2; color: #b91c1c; display: inline-block; padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 700; margin-bottom: 10px;">⚠️ SEPSIS WARNING TRIGGERED</div>
+                    <div style="display: flex; align-items: baseline; gap: 20px;">
+                        <span class="qsofa-val" id="qsofaValue">2</span>
+                        <span style="font-size: 24px; font-weight: 700; color: #475569;">qSOFA Score</span>
+                    </div>
+                </div>
+
+                <div class="metrics-grid">
+                    <div class="metric-item">
+                        <div class="metric-label">🌡️ 體溫 (Temperature)</div>
+                        <div class="metric-value" id="tempText" style="color: var(--danger);">39.0°C</div>
+                        <div class="chart-container"><canvas id="tempChart"></canvas></div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">🫁 呼吸率 (RR)</div>
+                        <div class="metric-value" id="rrText" style="color: var(--danger);">27 bpm</div>
+                        <div class="chart-container"><canvas id="rrChart"></canvas></div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">🩸 收縮壓 (SBP)</div>
+                        <div class="metric-value" id="bpText" style="color: var(--danger);">92 mmHg</div>
+                        <div class="chart-container"><canvas id="bpChart"></canvas></div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">🧪 乳酸 (Lactate)</div>
+                        <div class="metric-value" id="lactateText">3.5 mmol/L</div>
+                        <div class="chart-container"><canvas id="lactateChart"></canvas></div>
                     </div>
                 </div>
             </div>
+
+            <div style="display: flex; flex-direction: column; gap: 30px;">
+                <div class="glass-card cds-card">
+                    <h3 style="font-size: 18px; display: flex; align-items: center; gap: 8px;">💡 CDS 介入建議</h3>
+                    <div class="cds-alert"><span>📍</span><strong>立即進行血液培養 (Blood Cultures)</strong></div>
+                    <div class="cds-alert"><span>📍</span><strong>啟動廣效性抗生素 (Empiric Antibiotics)</strong></div>
+                    <div class="cds-alert" style="margin-bottom: 20px;"><span>📍</span><strong>輸液治療建議：30mL/kg Crystalloid</strong></div>
+                    <button class="btn btn-primary" style="background: #92400e;" onclick="alert('藥物處方 MedicationRequest 已傳送至醫囑系統')">🚀 執行建議處方</button>
+                </div>
+
+                <div class="glass-card" style="flex: 1;">
+                    <h3 style="font-size: 16px; margin-bottom: 15px;">📊 數據傳輸歷史 (FHIR)</h3>
+                    <div id="fhirHistory" style="font-size: 12px; color: #64748b; line-height: 2;">
+                        <div>🕒 12:00:05 - Observation/695171 Created</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isMonitoring = false;
+        let charts = {};
+        const config = {
+            temp: { color: '#ef4444', data: [38.2, 38.5, 38.4, 38.8, 38.9, 39.0] },
+            rr: { color: '#f59e0b', data: [22, 24, 25, 23, 26, 27] },
+            bp: { color: '#3b82f6', data: [105, 100, 98, 95, 94, 92] },
+            lactate: { color: '#8b5cf6', data: [2.1, 2.5, 2.8, 3.2, 3.4, 3.5] }
+        };
+
+        // 初始化 Chart.js
+        function initCharts() {
+            Object.keys(config).forEach(key => {
+                const ctx = document.getElementById(`${key}Chart`).getContext('2d');
+                charts[key] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['', '', '', '', '', ''],
+                        datasets: [{
+                            data: config[key].data,
+                            borderColor: config[key].color,
+                            borderWidth: 3,
+                            fill: true,
+                            backgroundColor: config[key].color + '15',
+                            tension: 0.4,
+                            pointRadius: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { x: { display: false }, y: { display: false } }
+                    }
+                });
+            });
+        }
+
+        // 切換監控狀態
+        function toggleMonitoring() {
+            isMonitoring = !isMonitoring;
+            const btn = document.getElementById('startBtn');
+            const mainPanel = document.getElementById('mainPanel');
             
-            <div>
-                <button class="btn btn-primary" id="startBtn" onclick="startMonitoring()">▶️ 開始5分鐘監測</button
+            if (isMonitoring) {
+                btn.textContent = "⏸ 停止監測";
+                btn.style.background = "#64748b";
+                mainPanel.classList.add('emergency-bg');
+                startDataStream();
+            } else {
+                location.reload(); // 簡單重置
+            }
+        }
+
+        // 模擬數據流
+        function startDataStream() {
+            setInterval(() => {
+                if (!isMonitoring) return;
+
+                // 模擬數據變化
+                const newTemp = 38.5 + Math.random();
+                const newRR = 24 + Math.floor(Math.random() * 5);
+                const newBP = 90 + Math.floor(Math.random() * 10);
+                const newLac = 3.0 + Math.random();
+
+                // 更新文字
+                document.getElementById('tempText').textContent = newTemp.toFixed(1) + '°C';
+                document.getElementById('rrText').textContent = newRR + ' bpm';
+                document.getElementById('bpText').textContent = newBP + ' mmHg';
+                document.getElementById('lactateText').textContent = newLac.toFixed(1) + ' mmol/L';
+                document.getElementById('syncTime').textContent = new Date().toLocaleTimeString();
+
+                // 更新圖表
+                updateChart(charts.temp, newTemp);
+                updateChart(charts.rr, newRR);
+                updateChart(charts.bp, newBP);
+                updateChart(charts.lactate, newLac);
+            }, 3000);
+        }
+
+        function updateChart(chart, value) {
+            chart.data.datasets[0].data.push(value);
+            chart.data.datasets[0].data.shift();
+            chart.update('none');
+        }
+
+        function uploadFHIR() {
+            const status = document.getElementById('uploadStatus');
+            const history = document.getElementById('fhirHistory');
+            status.style.display = 'block';
+            const log = document.createElement('div');
+            log.textContent = `🕒 ${new Date().toLocaleTimeString()} - Bundle Transaction Success (ID: ${Math.floor(Math.random()*1000000)})`;
+            history.prepend(log);
+        }
+
+        // 計時器動畫
+        setInterval(() => {
+            const timeEl = document.getElementById('doorTime');
+            let [m, s] = timeEl.textContent.split(':').slice(1).map(Number);
+            s++;
+            if (s === 60) { s = 0; m++; }
+            timeEl.textContent = `00:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+        }, 1000);
+
+        window.onload = initCharts;
+    </script>
+</body>
+</html>
